@@ -14,10 +14,17 @@
  You should have received a copy of the GNU General Public License along
  with HidnSeek.  If not, see <http://www.gnu.org/licenses/>.*/
 
- /****************** ATMega328p pin values *******************************/
+#include "Arduino.h"
+#include "SoftwareSerial.h"
+#include "TinyGPS.h"
+#include "Barometer.h"
+#include "EEPROM.h"
+#include "MMA8653.h"
 
 #ifndef HIDNSEEK_H
 #define HIDNSEEK_H
+
+/****************** ATMega328p pin values *******************************/
 
 #define rxGPS            0     // PD0 RX Serial from GPS
 #define txGPS            1     // PD1 TX Serial to GPS
@@ -47,31 +54,24 @@
 #define redLEDon   PORTD |= (1 << redLEDpin)
 #define redLEDoff  PORTD &= ~(1 << redLEDpin)
 
-/*********************************************************************/
-
 /****************** Pins output values *******************************/
+
 #define DIGITAL_PULLUP ((1 << shdPin) | (1 << accINT) | (1 << usbDP) | (1 << usbDM))
-/*********************************************************************/
 
 /****************** Pins direction ***********************************/
+
 #define DDRC_MASK (1 << 2)
 #define DIGITAL_OUTPUT ((1 << shdPin) | (1 << redLEDpin) | (1 << bluLEDpin) | (1 << rxSigfox) | (1 << rstPin))
-/*********************************************************************/
-
-#define ALTITUDE 252.0 // Altitude of HidnSeek's HQ in Grenoble in meters
 
 /****************** GPS Commands *******************************/
 
 #define PMTK_SET_NMEA_OUTPUT  "$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*" // 28"
-
 #define PMTK_AWAKE   "$PMTK010,001*" // 2E"
 #define PMTK_STANDBY "$PMTK161,0*"   // 28"
 #define PMTK_VERSION "$PMTK605*"     // 31"
 #define PMTK_SET_NMEA_UPDATE_1HZ "$PMTK220,1000*" // 1F"
 #define PMTK_ENABLE_SBAS "$PMTK313,1*" // 2E"
 #define PMTK_ENABLE_WAAS "$PMTK301,2*" // 2E"
-
-/*********************************************************************/
 
 /****************** Accelerometer *******************************/
 
@@ -81,14 +81,12 @@
 #define SPORT_LIMIT 48      // 4h limit sport duration
 #define PERIOD_LOOP 10      // number of minutes between messages, must be > 10
 #define MOTION_MIN_NUMBER 2
-
 #define PERIOD_COUNT ((PERIOD_LOOP * 15) >> 1)
 
 /****************** Battery *******************************/
 
 #define BATT_MIN 3570
 #define BATT_MAX 4200
-
 #define NUM_READS 100
 
 /****************** EEPROM Map *******************************/
@@ -98,18 +96,11 @@
 #define ADDR_CAL_LOW  32 // byte32-33: battery calibration
 #define ADDR_CAL_HIGH 33
 
+/****************** Barometer *******************************/
+
+#define ALTITUDE 252.0 // Altitude of HidnSeek's HQ in Grenoble in meters
+
 /*********************************************************************/
-
-/* INCLUDES */
-
-#include "Arduino.h"
-#include "SoftwareSerial.h"
-#include "TinyGPS.h"
-#include "Barometer.h"
-#include "EEPROM.h"
-#include "MMA8653.h"
-
-/* FUNCTIONS */
 
 class HidnSeek {
     public:
@@ -127,10 +118,10 @@ class HidnSeek {
         void serialString(PGM_P s);
         void flashRed(int num);
         void NoflashRed();
-        void gpsCmd(PGM_P s);
-        bool initGPS();
-        void gpsStandby();
-        bool gpsProcess();
+
+        /* HidnSeek Modes */
+        uint8_t forceSport = 0;
+        uint8_t limitSport = 0;
         /* SIGFOX Functions */
         bool send(const void* data, uint8_t len);
         bool isReady();
@@ -138,6 +129,8 @@ class HidnSeek {
         uint8_t getRev();
         bool initSigFox();
         void sendSigFox(byte msgType);
+        /* GPS Functions */
+        bool initGPS();
         /* Accelerometer Functions */
         bool initMems();
         bool accelStatus();
@@ -153,13 +146,25 @@ class HidnSeek {
         unsigned int calibrate(unsigned int sensorValue);
         bool batterySense();
         void shutdownSys();
+        byte batteryPercent = 0;
 
         enum RETURN_CODE {
             OK = 'O',
             KO = 'K',
             SENT = 'S'
         };
-        TinyGPS gps;
+
+        enum msgs {
+          MSG_POSITION = 0, MSG_OPTION = 3, MSG_NO_MOTION = 4, MSG_NO_GPS = 5,
+          MSG_MOTION_ALERT = 6, MSG_WEAK_BAT = 7
+        };
+
+        enum {
+          POS_FACE_UP = 0, POS_FACE_DN = 1, POS_SIDE_UP = 2,
+          POS_SIDE_DN = 3, POS_SIDE_RT = 4, POS_SIDE_LT = 5,
+          POS_NULL = 6
+        };
+
         MMA8653 accel;
         Barometer bmp180;
 
@@ -169,8 +174,6 @@ class HidnSeek {
         unsigned long _lastSend, _lastCheck;
         uint8_t _rxPin;
         uint8_t _txPin;
-        uint8_t forceSport = 0;
-        uint8_t limitSport = 0;
         uint8_t loopGPS = 0;
 
         /* Battery */
@@ -181,12 +184,34 @@ class HidnSeek {
 
         uint8_t _nextReturn();
         void _command(PGM_P s);
-        /* GPS Fuctions */
+
+        unsigned long start = 0;
+        uint8_t  today = 0;
+        uint8_t  MsgCount = 0;
+
+        byte     accelPosition;
+        int8_t   detectMotion = 1;
+        uint16_t batteryValue;
+
+        // BMP180 measurements
+        float    Temp = 0;
+        uint16_t Press = 0;
+
+};
+
+class GPS {
+    public:
+        TinyGPS gps;
+
+        void gpsCmd(PGM_P s);
+        void gpsStandby();
+        bool gpsProcess();
+    private:
         void print_date();
         void printData(bool complete);
         void makePayload();
         void decodPayload();
-        /* GPS Variables */
+
         boolean GPSactive = true;
         int year = 0;
         byte month, day, hour, minute, second, hundredths = 0;
@@ -204,29 +229,6 @@ class HidnSeek {
         // For automatic airplane mode detection
         boolean airPlaneSpeed = false;
         boolean airPlanePress = false;
-
-        unsigned long start = 0;
-        uint8_t  today = 0;
-        uint8_t  MsgCount = 0;
-
-        byte     accelPosition;
-        int8_t   detectMotion = 1;
-        uint16_t batteryValue;
-        byte     batteryPercent = 0;
-        // BMP180 measurements
-        float    Temp = 0;
-        uint16_t Press = 0;
-
-        enum msgs {
-          MSG_POSITION = 0, MSG_OPTION = 3, MSG_NO_MOTION = 4, MSG_NO_GPS = 5,
-          MSG_MOTION_ALERT = 6, MSG_WEAK_BAT = 7
-        };
-
-        enum {
-          POS_FACE_UP = 0, POS_FACE_DN = 1, POS_SIDE_UP = 2,
-          POS_SIDE_DN = 3, POS_SIDE_RT = 4, POS_SIDE_LT = 5,
-          POS_NULL = 6
-        };
 };
 
 #endif

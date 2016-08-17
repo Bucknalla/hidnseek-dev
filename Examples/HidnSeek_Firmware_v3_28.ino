@@ -14,10 +14,7 @@
   HidnSeek by StephaneD 2015 03 13 Not for commercial use              */
 
 #define FILE "HidnSeek_v3_28"
-#include "EEPROM.h"
-#include "LowPower.h"
 #include "HidnSeek.h"
-#include "def.h"
 
 HidnSeek HidnSeek(txSigfox, rxSigfox);
 

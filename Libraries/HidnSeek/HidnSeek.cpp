@@ -301,7 +301,7 @@ void HidnSeek::checkBattery() {
 
 /* GPS FUNCTIONS */
 
-void HidnSeek::gpsCmd(PGM_P s) {
+void GPS::gpsCmd(PGM_P s) {
   int XOR = 0;
   char c;
   while ((c = pgm_read_byte(s++)) != 0) {
@@ -332,12 +332,12 @@ bool HidnSeek::initGPS()
   return GPSready;
 }
 
-void HidnSeek::gpsStandby() {
+void GPS::gpsStandby() {
   GPSactive = false;
   digitalWrite(rstPin, LOW);
 }
 
-bool HidnSeek::gpsProcess()
+bool GPS::gpsProcess()
 {
   boolean newGpsData = false;
   boolean newSerialData = false;
@@ -390,7 +390,7 @@ bool HidnSeek::gpsProcess()
   return newSerialData;
 }
 
-void HidnSeek::print_date()
+void GPS::print_date()
 {
   char sz[24];
   sprintf(sz, "%02d/%02d/%02d %02d:%02d:%02d ",
@@ -398,7 +398,7 @@ void HidnSeek::print_date()
   Serial.print(sz);
 }
 
-void HidnSeek::printData(bool complete) {
+void GPS::printData(bool complete) {
   print_date();
   serialString(PSTR("fix="));
   Serial.print(fix_age);
@@ -429,7 +429,7 @@ void HidnSeek::printData(bool complete) {
   Serial.println(syncSat);
 }
 
-void HidnSeek::makePayload() {
+void GPS::makePayload() {
   uint8_t cap;
   if (sat > 3) {
     if (spd > 120 && alt > 1250) {
@@ -455,7 +455,7 @@ void HidnSeek::makePayload() {
   p.cpx |= (uint32_t) 3 & (sat / 4); // sat range is 0 to 14
 }
 
-void HidnSeek::decodPayload() {
+void GPS::decodPayload() {
   unsigned int alt_ = p.cpx >> 19;
   unsigned int cap_ = (p.cpx >> 10) & 3;
   unsigned int spd_ = (p.cpx >> 12) & 127;
