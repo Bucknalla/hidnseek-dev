@@ -17,6 +17,46 @@
 #include <Arduino.h>
 #include "HidnSeek.h"
 
+boolean GPSactive = true;
+int year = 0;
+byte month, day, hour, minute, second, hundredths = 0;
+uint16_t alt, spd = 0;
+uint8_t  sat, syncSat, noSat = 0;
+unsigned long fix_age = 0;
+
+Payload p;
+
+uint8_t forceSport;
+uint8_t limitSport = 0;
+
+uint8_t loopGPS = 0;
+
+MMA8653 accel;
+Barometer bmp180;
+
+float    Temp = 0;
+uint16_t Press = 0;
+
+boolean accelPresent = false;
+boolean baromPresent = false;
+// For automatic airplane mode detection
+boolean airPlaneSpeed = false;
+boolean airPlanePress = false;
+
+byte batteryPercent = 0;
+
+int8_t   detectMotion = 1;
+
+unsigned long start = 0;
+
+uint16_t batteryValue;
+
+byte     accelPosition;
+
+uint8_t  today = 0;
+uint8_t  MsgCount = 0;
+
+
 HidnSeek::HidnSeek(uint8_t rxPin, uint8_t txPin) :
     _serial(rxPin, txPin) {
      //Since _lastSend is unsigned, this is infinity
@@ -24,6 +64,9 @@ HidnSeek::HidnSeek(uint8_t rxPin, uint8_t txPin) :
 }
 
 HidnSeek::~HidnSeek() {
+}
+
+GPS::GPS(){
 }
 
 int HidnSeek::begin() {
@@ -169,7 +212,7 @@ void HidnSeek::NoflashRed() {
   PORTD |= (1 << redLEDpin) | (forceSport << bluLEDpin);
 }
 
-void HidnSeek::serialString (PGM_P s) {
+void serialString (PGM_P s) {
   char c;
   while ((c = pgm_read_byte(s++)) != 0)
     Serial.print(c);
@@ -267,18 +310,6 @@ void HidnSeek::changeCurrent500mA(boolean current){
 }
 
 void HidnSeek::initGPIO() {
-    // PORTB = B00111010;
-    // DDRB  = B00000111;
-    // DDRC  = B01000101;
-    // PORTC = B00000000;
-    // if (discret) {
-    //     DDRD  = B00000010;
-    //     PORTD = B00011000;
-    // }
-    // else {
-    //     DDRD  = B11000010;
-    //     PORTD = B00011000;
-    // }
     PORTB = (DIGITAL_PULLUP >> 8) & 0xff;
     DDRB  = (DIGITAL_OUTPUT >> 8) & 0xff;
     PORTC = 0x00;
@@ -313,7 +344,7 @@ void GPS::gpsCmd(PGM_P s) {
   Serial.println(XOR, HEX);
 }
 
-bool HidnSeek::initGPS()
+bool GPS::initGPS()
 {
   boolean GPSready = false;
   digitalWrite(rstPin, HIGH);
@@ -390,7 +421,7 @@ bool GPS::gpsProcess()
   return newSerialData;
 }
 
-void GPS::print_date()
+void GPS::printDate()
 {
   char sz[24];
   sprintf(sz, "%02d/%02d/%02d %02d:%02d:%02d ",
@@ -399,7 +430,7 @@ void GPS::print_date()
 }
 
 void GPS::printData(bool complete) {
-  print_date();
+  printDate();
   serialString(PSTR("fix="));
   Serial.print(fix_age);
   if (complete) {
@@ -456,34 +487,35 @@ void GPS::makePayload() {
 }
 
 void GPS::decodPayload() {
+
   unsigned int alt_ = p.cpx >> 19;
   unsigned int cap_ = (p.cpx >> 10) & 3;
   unsigned int spd_ = (p.cpx >> 12) & 127;
   unsigned int bat_ = (p.cpx >> 3) & 127;
   unsigned int mod_ = p.cpx & 7;
-  print_date();
-  serialString(PSTR("msg="));
+  printDate();
+  ::serialString(PSTR("msg="));
   Serial.print(MsgCount);
-  serialString(PSTR(" lat="));
+  ::serialString(PSTR(" lat="));
   Serial.print(p.lat, 7);
-  serialString(PSTR(", lon="));
+  ::serialString(PSTR(", lon="));
   Serial.print(p.lon, 7);
-  serialString(PSTR(", alt="));
+  ::serialString(PSTR(", alt="));
   Serial.print(alt_);
-  serialString(PSTR(", cap="));
+  ::serialString(PSTR(", cap="));
   Serial.print(cap_);
-  serialString(PSTR(", spd="));
+  ::serialString(PSTR(", spd="));
   Serial.print(spd_);
-  serialString(PSTR(", bat="));
+  ::serialString(PSTR(", bat="));
   Serial.print(bat_);
-  serialString(PSTR(", mode="));
+  ::serialString(PSTR(", mode="));
   Serial.println(mod_);
 }
 
 /* Sigfox Functions */
 
 bool HidnSeek::initSigFox() {
-  serialString(PSTR("SigFox: "));
+  ::serialString(PSTR("SigFox: "));
   unsigned long previousMillis = millis();
   while ((uint16_t) (millis() - previousMillis) < 6000) {
     if (begin() == 3) {
@@ -492,14 +524,15 @@ bool HidnSeek::initSigFox() {
     }
     else delay(200);
   }
-  serialString(PSTR("Fail\r\n"));
+  ::serialString(PSTR("Fail\r\n"));
   return false;
 }
 
 void HidnSeek::sendSigFox(byte msgType) {
+  GPS gps;
   PORTD |= (1 << redLEDpin);
   // isReady check removed in the library due to reset of millis during sleep time
-  makePayload();
+  gps.makePayload();
   if (msgType > 0) {
     if (baromPresent) {
       bmp180Measure(&Temp, &Press);
@@ -515,7 +548,7 @@ void HidnSeek::sendSigFox(byte msgType) {
     p.cpx &= ~(7 << 0);
     p.cpx |= (uint32_t) (  7 & msgType); // mode (2bits)
   }
-  decodPayload();
+  gps.decodPayload();
   unsigned long previousMillis = millis();
   if ( !(msgType > 0 && airPlanePress) && !airPlaneSpeed) {
     send(&p, sizeof(p));
@@ -544,11 +577,11 @@ bool HidnSeek::bmp180Measure(float *Temp, unsigned int *Press)
 
 void HidnSeek::bmp180Print()
 {
-  serialString(PSTR("Temp: "));
+  ::serialString(PSTR("Temp: "));
   Serial.print(Temp, 2);
-  serialString(PSTR("'C Press: "));
+  ::serialString(PSTR("'C Press: "));
   Serial.print(Press);
-  serialString(PSTR("mb\r\n"));
+  ::serialString(PSTR("mb\r\n"));
 }
 
 /* EEPROM */
@@ -583,10 +616,10 @@ void HidnSeek::dumpEEprom() {
     today = 0;
     EEPROM.write(ADDR_TODAY, 0);;
   }
-  serialString(PSTR("Last day:"));
+  ::serialString(PSTR("Last day:"));
   Serial.println(today);
   // Display numbers of messages sent to sigfox network on day 1, 2, 3, ... , 30, 31
-  serialString(PSTR("Usage per days:"));
+  ::serialString(PSTR("Usage per days:"));
   for (int i = ADDR_SENT; i < ADDR_SENT + 31; i++) {
     MsgCount = EEPROM.read(i);
     if (MsgCount == 255) {
@@ -603,22 +636,23 @@ void HidnSeek::dumpEEprom() {
 /* Accelerometer */
 
 bool HidnSeek::initMems() {
-  serialString(PSTR("Init Mems:"));
+  ::serialString(PSTR("Init Mems:"));
   Wire.begin();
   accel.begin(false, ACCEL_MODE);
   if (accel.update() != 0) {
-    serialString(PSTR("Fail"));
+    ::serialString(PSTR("Fail"));
     Serial.println();
     return false;
   }
   else {
-    serialString(PSTR("OK"));
+    ::serialString(PSTR("OK"));
     Serial.println();
     return true;
   }
 }
 
 bool HidnSeek::accelStatus() {
+  GPS gps;
   static int8_t x, y, z;
   static byte seq;
   if (accelPresent == false) return true;
@@ -680,7 +714,7 @@ bool HidnSeek::accelStatus() {
         if (MsgCount < 90) {
           forceSport = 1 - forceSport;
           limitSport = 0;
-          if (forceSport && !GPSactive) initGPS();
+          if (forceSport && !GPSactive) gps.initGPS();
           flashRed(8);
         }
         seq = 0;
@@ -694,7 +728,7 @@ void HidnSeek::initSense() {
   byte lowByte = EEPROM.read(ADDR_CAL_LOW);
   byte highByte = EEPROM.read(ADDR_CAL_HIGH);
   sensorMax = ((lowByte << 0) & 0xFF) + ((highByte << 8) & 0xFF00);
-  serialString(PSTR("SensorMax: "));
+  ::serialString(PSTR("SensorMax: "));
   Serial.print(sensorMax);
   sensorMax = 980;
 }
@@ -751,7 +785,7 @@ bool HidnSeek::batterySense() {
 
 void HidnSeek::shutdownSys() { // 3.57V on battery voltage
   digitalWrite(rstPin, LOW);
-  serialString(PSTR("Low Bat: "));
+  ::serialString(PSTR("Low Bat: "));
   saveEEprom();
   sendSigFox(MSG_WEAK_BAT);
   digitalWrite(shdPin, LOW);

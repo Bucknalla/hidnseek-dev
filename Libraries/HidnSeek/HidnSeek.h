@@ -14,16 +14,16 @@
  You should have received a copy of the GNU General Public License along
  with HidnSeek.  If not, see <http://www.gnu.org/licenses/>.*/
 
-#include "Arduino.h"
-#include "SoftwareSerial.h"
-#include "TinyGPS.h"
-#include "Barometer.h"
-#include "EEPROM.h"
-#include "MMA8653.h"
-
 #ifndef HIDNSEEK_H
 #define HIDNSEEK_H
 
+#include "Arduino.h"
+#include "SoftwareSerial.h"
+#include "TinyGPS.h"
+#include "LowPower.h"
+#include "Barometer.h"
+#include "EEPROM.h"
+#include "MMA8653.h"
 /****************** ATMega328p pin values *******************************/
 
 #define rxGPS            0     // PD0 RX Serial from GPS
@@ -102,6 +102,70 @@
 
 /*********************************************************************/
 
+typedef enum {
+  POS_FACE_UP = 0, POS_FACE_DN = 1, POS_SIDE_UP = 2,
+  POS_SIDE_DN = 3, POS_SIDE_RT = 4, POS_SIDE_LT = 5,
+  POS_NULL = 6
+} positions;
+
+typedef enum {
+  MSG_POSITION = 0, MSG_OPTION = 3, MSG_NO_MOTION = 4, MSG_NO_GPS = 5,
+  MSG_MOTION_ALERT = 6, MSG_WEAK_BAT = 7
+} msgs;
+
+typedef enum {
+    OK = 'O',
+    KO = 'K',
+    SENT = 'S'
+} RETURN_CODE;
+
+extern boolean GPSactive;
+extern int year;
+extern byte month, day, hour, minute, second, hundredths;
+extern uint16_t alt, spd;
+extern uint8_t  sat, syncSat, noSat;
+extern unsigned long fix_age;
+
+struct Payload {
+  float lat;
+  float lon;
+  uint32_t cpx;
+};
+
+extern struct Payload p;
+
+extern uint8_t forceSport;
+extern uint8_t limitSport;
+
+extern uint8_t loopGPS;
+
+extern float    Temp;
+extern uint16_t Press;
+
+extern boolean accelPresent;
+extern boolean baromPresent;
+// For automatic airplane mode detection
+extern boolean airPlaneSpeed;
+extern boolean airPlanePress;
+
+extern byte batteryPercent;
+
+extern int8_t   detectMotion;
+
+extern unsigned long start;
+
+extern uint16_t batteryValue;
+
+extern byte     accelPosition;
+
+extern uint8_t  today;
+extern uint8_t  MsgCount;
+
+void serialString (PGM_P s);
+
+
+/*********************************************************************/
+
 class HidnSeek {
     public:
         HidnSeek(uint8_t rxPin, uint8_t txPin);
@@ -118,10 +182,8 @@ class HidnSeek {
         void serialString(PGM_P s);
         void flashRed(int num);
         void NoflashRed();
-
         /* HidnSeek Modes */
-        uint8_t forceSport = 0;
-        uint8_t limitSport = 0;
+
         /* SIGFOX Functions */
         bool send(const void* data, uint8_t len);
         bool isReady();
@@ -130,7 +192,6 @@ class HidnSeek {
         bool initSigFox();
         void sendSigFox(byte msgType);
         /* GPS Functions */
-        bool initGPS();
         /* Accelerometer Functions */
         bool initMems();
         bool accelStatus();
@@ -146,27 +207,6 @@ class HidnSeek {
         unsigned int calibrate(unsigned int sensorValue);
         bool batterySense();
         void shutdownSys();
-        byte batteryPercent = 0;
-
-        enum RETURN_CODE {
-            OK = 'O',
-            KO = 'K',
-            SENT = 'S'
-        };
-
-        enum msgs {
-          MSG_POSITION = 0, MSG_OPTION = 3, MSG_NO_MOTION = 4, MSG_NO_GPS = 5,
-          MSG_MOTION_ALERT = 6, MSG_WEAK_BAT = 7
-        };
-
-        enum {
-          POS_FACE_UP = 0, POS_FACE_DN = 1, POS_SIDE_UP = 2,
-          POS_SIDE_DN = 3, POS_SIDE_RT = 4, POS_SIDE_LT = 5,
-          POS_NULL = 6
-        };
-
-        MMA8653 accel;
-        Barometer bmp180;
 
     private:
         /* SIGFOX Variables */
@@ -185,50 +225,28 @@ class HidnSeek {
         uint8_t _nextReturn();
         void _command(PGM_P s);
 
-        unsigned long start = 0;
-        uint8_t  today = 0;
-        uint8_t  MsgCount = 0;
-
-        byte     accelPosition;
-        int8_t   detectMotion = 1;
-        uint16_t batteryValue;
 
         // BMP180 measurements
-        float    Temp = 0;
-        uint16_t Press = 0;
 
 };
 
 class GPS {
     public:
-        TinyGPS gps;
-
+        GPS();
+        bool initGPS();
         void gpsCmd(PGM_P s);
         void gpsStandby();
         bool gpsProcess();
-    private:
-        void print_date();
-        void printData(bool complete);
         void makePayload();
         void decodPayload();
 
-        boolean GPSactive = true;
-        int year = 0;
-        byte month, day, hour, minute, second, hundredths = 0;
-        uint16_t alt, spd = 0;
-        uint8_t  sat, syncSat, noSat = 0;
-        unsigned long fix_age = 0;
-        struct Payload {
-          float lat;
-          float lon;
-          uint32_t cpx;
-        };
-        Payload p;
-        boolean accelPresent = false;
-        boolean baromPresent = false;
-        // For automatic airplane mode detection
-        boolean airPlaneSpeed = false;
-        boolean airPlanePress = false;
+    private:
+        TinyGPS gps;
+        MMA8653 accel;
+        Barometer bmp180;
+        void printDate();
+        void printData(bool complete);
+
 };
 
 #endif

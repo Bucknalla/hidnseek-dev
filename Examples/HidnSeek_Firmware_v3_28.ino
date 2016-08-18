@@ -18,6 +18,8 @@
 
 HidnSeek HidnSeek(txSigfox, rxSigfox);
 
+GPS gps;
+
 int powerDownLoop(int msgs) {
   if (HidnSeek.batterySense()) HidnSeek.shutdownSys(); // else digitalWrite(shdPin, HIGH);
   if (forceSport) {
