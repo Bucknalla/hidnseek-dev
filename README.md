@@ -1,3 +1,4 @@
+<p align="center"><img src ="http://www.sigfox.com/themes/custom/sigfox/images/logo-2016.svg" width="300"></p>
 # HidnSeek Development Kit
 This repository contains the documentation for the HidnSeek to be used as a SIGFOX Development Kit. Much of the core device functionality such as its sports mode and low power loops have been abstracted away to allow for a developer to call these methods into their own projects. 
 
